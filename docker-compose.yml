@@ -1,0 +1,50 @@
+services:
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: materiales
+      MARIADB_USER: materiales
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD en .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Defina DB_ROOT_PASSWORD en .env}
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes: [db_data:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    environment:
+      DATABASE_URL: mysql+pymysql://materiales:${DB_PASSWORD}@db:3306/materiales?charset=utf8mb4
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET en .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@sena.edu.co}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Defina ADMIN_PASSWORD en .env}
+      MANAGER_EMAIL: ${MANAGER_EMAIL:-manager@sena.edu.co}
+      MANAGER_PASSWORD: ${MANAGER_PASSWORD:?Defina MANAGER_PASSWORD en .env}
+      CENTRO_CODIGO: ${CENTRO_CODIGO:-CASA}
+      CENTRO_NOMBRE: ${CENTRO_NOMBRE:-Centro de Atención al Sector Agropecuario}
+      CENTRO_REGIONAL: ${CENTRO_REGIONAL:-Santander}
+      SEED_EXCEL: ${SEED_EXCEL:-}
+      SEED_DEMO: ${SEED_DEMO:-0}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8000}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-1}
+      SMTP_SSL: ${SMTP_SSL:-0}
+      APP_URL: ${APP_URL:-http://localhost:8000}
+    ports: ["${PORT:-8000}:8000"]
+    volumes:
+      - pdf_storage:/data/uploads
+      - ./contexto:/seed:ro
+
+volumes:
+  db_data:
+  pdf_storage:
