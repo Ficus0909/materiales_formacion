@@ -13,7 +13,7 @@ from ..models import (
     Articulo, Cotizacion, CotizacionItem, Lote, PrecioHistorico, PropuestaArticulo, Proveedor, SolicitudItem,
     Usuario, Vigencia,
 )
-from ..security import solo_admin, solo_lider, usuario_actual
+from ..security import solo_admin, solo_lider, equipo_compras
 from ..services import excel_export, excel_import
 from ..services.common import (
     actividad, centro_de, get_or_404, lote_del_lider, notificar, notificar_admins, verificar_centro,
@@ -50,7 +50,7 @@ def _filtrar(user: Usuario, q: str, lote_id: int | None, activo: str, centro_id:
 
 @router.get("/articulos")
 def listar(q: str = "", lote_id: int | None = None, activo: str = "true", pagina: int = 1, por_pagina: int = 50,
-           centro_id: int | None = None, user=Depends(usuario_actual), db: Session = Depends(get_db)):
+           centro_id: int | None = None, user=Depends(equipo_compras), db: Session = Depends(get_db)):
     stmt = _filtrar(user, q, lote_id, activo, centro_id)
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))
     por_pagina = min(max(por_pagina, 1), 2000)
@@ -64,14 +64,14 @@ def listar(q: str = "", lote_id: int | None = None, activo: str = "true", pagina
 
 @router.get("/articulos/exportar")
 def exportar(q: str = "", lote_id: int | None = None, activo: str = "true", centro_id: int | None = None,
-             user=Depends(usuario_actual), db: Session = Depends(get_db)):
+             user=Depends(equipo_compras), db: Session = Depends(get_db)):
     arts = db.scalars(_filtrar(user, q, lote_id, activo, centro_id)).all()
     data = excel_export.listado_maestro(arts, "LISTADO MAESTRO DE FICHAS TÉCNICAS")
     return Response(data, media_type=XLSX, headers={"Content-Disposition": 'attachment; filename="listado_maestro.xlsx"'})
 
 
 @router.get("/articulos/{aid}")
-def detalle(aid: int, user=Depends(usuario_actual), db: Session = Depends(get_db)):
+def detalle(aid: int, user=Depends(equipo_compras), db: Session = Depends(get_db)):
     a = get_or_404(db, Articulo, aid, "Artículo")
     if user.rol == "LIDER" and a.lote_id != user.lote_id:
         raise HTTPException(403, "El artículo no pertenece a su lote")
@@ -210,7 +210,7 @@ def propuesta_out(p: PropuestaArticulo) -> dict:
 
 
 @router.get("/propuestas")
-def listar_propuestas(estado: str = "", centro_id: int | None = None, user=Depends(usuario_actual),
+def listar_propuestas(estado: str = "", centro_id: int | None = None, user=Depends(equipo_compras),
                       db: Session = Depends(get_db)):
     stmt = select(PropuestaArticulo).join(Lote).order_by(PropuestaArticulo.creado.desc())
     centro = centro_de(user, centro_id)

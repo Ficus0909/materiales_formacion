@@ -1,0 +1,16 @@
+{
+  "v": 4,
+  "createdOnFiles": { "v": 1, "at": "2026-10-15T14:00:00Z" },
+  "lists": "css",
+  "title": "SIGMA · Ponencia de innovación",
+  "order": ["cover", "problema", "solucion", "estudio", "multicentro", "f014", "inventario", "legalizacion", "impacto", "cierre"],
+  "sections": {
+    "s1": { "description": "El problema de partida y la solución en una línea", "start": "cover" },
+    "s2": { "description": "Las cinco innovaciones del sistema, con capturas reales", "start": "estudio" },
+    "s3": { "description": "Resultados, escalabilidad y cierre", "start": "impacto" }
+  },
+  "faces": {
+    "work-sans": { "family": "Work Sans", "href": "https://fonts.googleapis.com/css2?family=Work+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,500&display=swap" }
+  },
+  "designSystems": []
+}

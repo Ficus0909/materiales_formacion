@@ -6,7 +6,10 @@ export const useAuth = defineStore('auth', {
   getters: {
     esAdmin: (s) => s.usuario?.rol === 'ADMIN',
     esManager: (s) => s.usuario?.rol === 'MANAGER',
-    inicio: (s) => ({ MANAGER: '/manager', ADMIN: '/admin' }[s.usuario?.rol] || '/lider'),
+    esLider: (s) => s.usuario?.rol === 'LIDER',
+    esCoordinador: (s) => s.usuario?.rol === 'COORDINADOR',
+    esInstructor: (s) => s.usuario?.rol === 'INSTRUCTOR',
+    inicio: (s) => ({ MANAGER: '/manager', ADMIN: '/admin', COORDINADOR: '/entregas', INSTRUCTOR: '/instructor' }[s.usuario?.rol] || '/lider'),
   },
   actions: {
     async login(email, password) {

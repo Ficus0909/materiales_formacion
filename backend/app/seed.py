@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import Base, SessionLocal, engine
-from .migraciones import migrar_centros
-from .models import Articulo, Centro, EstadoPost, IndiceAjuste, Lote, Proveedor, Usuario, Vigencia
+from .migraciones import migrar_centros, migrar_entregas
+from .models import Articulo, Centro, Coordinacion, EstadoPost, IndiceAjuste, Lote, Proveedor, Usuario, Vigencia
 from .security import hash_password
 from .services import excel_import
 
@@ -37,6 +37,13 @@ def centro_defecto(db: Session) -> Centro:
         c = Centro(codigo=settings.CENTRO_CODIGO, nombre=settings.CENTRO_NOMBRE, regional=settings.CENTRO_REGIONAL)
         db.add(c)
         db.flush()
+    if c.codigo == settings.CENTRO_CODIGO:  # datos del formato GIL-F-014 del centro por defecto
+        c.codigo_regional = c.codigo_regional or settings.CENTRO_COD_REGIONAL
+        c.centro_costo = c.centro_costo or settings.CENTRO_COSTO
+        if not db.scalar(select(Coordinacion).where(Coordinacion.centro_id == c.id)):
+            for nombre in filter(None, (n.strip() for n in settings.COORDINACIONES.split("|"))):
+                db.add(Coordinacion(centro_id=c.id, nombre=nombre))
+            db.flush()
     return c
 
 
@@ -98,6 +105,7 @@ def seed_demo(db: Session) -> None:
 def crear_esquema() -> None:
     Base.metadata.create_all(engine)
     migrar_centros(engine, settings.CENTRO_CODIGO, settings.CENTRO_NOMBRE, settings.CENTRO_REGIONAL)
+    migrar_entregas(engine)
 
 
 def init_db(excel: str = "", demo: bool = False) -> None:

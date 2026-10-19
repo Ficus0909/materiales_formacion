@@ -10,7 +10,7 @@ from ..models import (
     Actividad, Articulo, Centro, Cotizacion, CotizacionItem, Lote, Notificacion, PropuestaArticulo, Solicitud, Usuario,
     Vigencia,
 )
-from ..security import admin_o_manager, solo_lider, solo_manager, usuario_actual
+from ..security import admin_o_manager, equipo_compras, solo_lider, solo_manager, usuario_actual
 from ..services.common import centro_de, get_or_404, lote_del_lider, lotes_en_operacion
 from ..services.pricing import analizar
 from .analisis import cobertura
@@ -138,7 +138,7 @@ def dashboard_lider(lider=Depends(solo_lider), db: Session = Depends(get_db)):
 
 
 @router.get("/reportes/vigencia")
-def reporte_vigencia(vigencia_id: int, centro_id: int | None = None, user=Depends(usuario_actual),
+def reporte_vigencia(vigencia_id: int, centro_id: int | None = None, user=Depends(equipo_compras),
                      db: Session = Depends(get_db)):
     """Datos para los gráficos de reportes: artículos solicitados y valor por lote, estados y cobertura."""
     vig = get_or_404(db, Vigencia, vigencia_id, "Vigencia")
@@ -162,7 +162,7 @@ def reporte_vigencia(vigencia_id: int, centro_id: int | None = None, user=Depend
 
 
 @router.get("/reportes/historico")
-def reporte_historico(centro_id: int | None = None, user=Depends(usuario_actual), db: Session = Depends(get_db)):
+def reporte_historico(centro_id: int | None = None, user=Depends(equipo_compras), db: Session = Depends(get_db)):
     """Evolución por vigencia: número de solicitudes aprobadas y artículos."""
     centro = centro_de(user, centro_id)
     out = []

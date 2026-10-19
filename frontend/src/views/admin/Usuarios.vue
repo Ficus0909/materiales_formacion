@@ -8,7 +8,8 @@ import { toast, toastError } from '../../util'
 
 const auth = useAuth()
 const route = useRoute()
-const ROLES = { MANAGER: 'Manager', ADMIN: 'Administrador', LIDER: 'Líder de lote' }
+const ROLES = { MANAGER: 'Manager', ADMIN: 'Administrador', LIDER: 'Líder de lote', COORDINADOR: 'Coordinador', INSTRUCTOR: 'Instructor' }
+const coordinaciones = ref([])
 const usuarios = ref([])
 const lotes = ref([])
 const centros = ref([])
@@ -20,29 +21,34 @@ const POR = 15
 
 async function cargar() { usuarios.value = await api.get(`/usuarios${qs({ centro_id: centro.value })}`) }
 onMounted(async () => {
-  ;[lotes.value, centros.value] = await Promise.all([api.get('/lotes'), api.get('/centros')])
+  ;[lotes.value, centros.value, coordinaciones.value] = await Promise.all([api.get('/lotes'), api.get('/centros'), api.get('/coordinaciones')])
   cargar()
 })
 watch(centro, () => { pagina.value = 1; cargar() })
 const filtrados = computed(() => usuarios.value.filter((u) => !q.value || `${u.nombre} ${u.email}`.toLowerCase().includes(q.value.toLowerCase())))
 const visibles = computed(() => filtrados.value.slice((pagina.value - 1) * POR, pagina.value * POR))
 // El administrador sólo gestiona los líderes de su centro; los administradores los gestiona el manager
-const gestionable = (u) => auth.esManager || u.rol === 'LIDER'
+const gestionable = (u) => auth.esManager || ['LIDER', 'COORDINADOR', 'INSTRUCTOR'].includes(u.rol)
+const coordsDelCentro = computed(() => coordinaciones.value.filter((c) => c.centro_id === form.value?.centro_id && c.activo))
+const conCoordinacion = (rol) => ['COORDINADOR', 'INSTRUCTOR'].includes(rol)
 const lotesDelCentro = computed(() => lotes.value.filter((l) => l.centro_id === form.value?.centro_id))
 
 const nuevo = () => {
-  form.value = { nombre: '', email: '', rol: auth.esManager ? 'ADMIN' : 'LIDER', centro_id: centro.value || auth.usuario.centro_id || centros.value[0]?.id || '', lote_id: '', activo: true, password: '' }
+  form.value = { nombre: '', email: '', rol: auth.esManager ? 'ADMIN' : 'LIDER', centro_id: centro.value || auth.usuario.centro_id || centros.value[0]?.id || '', lote_id: '', coordinacion_id: '', documento: '', cargo: '', activo: true, password: '' }
 }
 const editar = (u) => { form.value = { ...u, password: '' } }
-watch(() => form.value?.centro_id, (n, o) => { if (o !== undefined && n !== o && form.value) form.value.lote_id = '' })
+watch(() => form.value?.centro_id, (n, o) => { if (o !== undefined && n !== o && form.value) { form.value.lote_id = ''; form.value.coordinacion_id = '' } })
 async function guardar() {
   const f = form.value
-  const body = { ...f, centro_id: f.rol === 'MANAGER' ? null : f.centro_id || null, lote_id: f.rol === 'LIDER' ? f.lote_id || null : null, password: f.password || null }
+  const body = { ...f, centro_id: f.rol === 'MANAGER' ? null : f.centro_id || null, lote_id: f.rol === 'LIDER' ? f.lote_id || null : null,
+    coordinacion_id: conCoordinacion(f.rol) ? f.coordinacion_id || null : null, documento: f.documento || '', password: f.password || null }
   try {
     const r = f.id ? await api.put(`/usuarios/${f.id}`, body) : await api.post('/usuarios', body)
-    toast(body.password
-      ? `Usuario guardado. ${r.correo_enviado ? `Las credenciales se enviaron a ${r.email}.` : 'El correo no está configurado: entréguele las credenciales manualmente.'} Deberá cambiar la contraseña en su primer ingreso.`
-      : 'Usuario guardado', 'ok', 7000)
+    const lider = r.rol === 'LIDER' && (!f.id || r.designado)
+    const correoTxt = r.correo_enviado
+      ? `Se envió a ${r.email} el correo de ${lider ? 'designación como líder del lote, con la vigencia del proceso' : 'acceso'}${body.password ? ' y las credenciales' : ''}.`
+      : `El correo no está configurado${body.password ? ': entréguele las credenciales manualmente' : ''}.`
+    toast(body.password || lider ? `Usuario guardado. ${correoTxt}${body.password ? ' Deberá cambiar la contraseña en su primer ingreso.' : ''}` : 'Usuario guardado', 'ok', 8000)
     form.value = null
     cargar()
   } catch (e) { toastError(e) }
@@ -70,7 +76,7 @@ async function eliminar(u) {
         <thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th v-if="auth.esManager">Centro</th><th>Lote</th><th>Estado</th><th></th></tr></thead>
         <tbody>
           <tr v-for="u in visibles" :key="u.id">
-            <td>{{ u.nombre }}</td><td>{{ u.email }}</td><td>{{ ROLES[u.rol] }}</td><td v-if="auth.esManager">{{ u.centro?.nombre || '—' }}</td><td>{{ u.lote?.nombre || '—' }}</td>
+            <td>{{ u.nombre }}</td><td>{{ u.email }}</td><td>{{ ROLES[u.rol] }}</td><td v-if="auth.esManager">{{ u.centro?.nombre || '—' }}</td><td>{{ u.lote?.nombre || u.coordinacion?.nombre || '—' }}<span v-if="!u.aprobado" class="badge" style="background:var(--naranja);margin-left:6px">Pendiente</span></td>
             <td><span class="badge" :style="{ background: u.activo ? 'var(--verde)' : '#A0AEC0' }">{{ u.activo ? 'Activo' : 'Inactivo' }}</span></td>
             <td class="right nowrap">
               <template v-if="gestionable(u)"><button class="btn ghost sm" @click="editar(u)">Editar</button> <button v-if="u.id !== auth.usuario.id" class="btn ghost sm" @click="alternar(u)">{{ u.activo ? 'Desactivar' : 'Activar' }}</button> <button v-if="u.id !== auth.usuario.id" class="btn ghost sm" style="color:var(--rojo)" @click="eliminar(u)">Eliminar</button></template>
@@ -87,14 +93,19 @@ async function eliminar(u) {
         <label class="f req full"><span>Nombre completo</span><input v-model="form.nombre" required /></label>
         <label class="f req full"><span>Correo institucional</span><input v-model="form.email" type="email" required /></label>
         <label class="f req"><span>Rol</span>
-          <select v-model="form.rol" :disabled="!auth.esManager || form.id === auth.usuario.id">
+          <select v-model="form.rol" :disabled="form.id === auth.usuario.id">
             <option v-if="auth.esManager" value="MANAGER">Manager (todos los centros)</option>
             <option v-if="auth.esManager" value="ADMIN">Administrador / Analista del centro</option>
             <option value="LIDER">Líder de lote</option>
+            <option value="COORDINADOR">Coordinador (aprueba solicitudes de bienes)</option>
+            <option value="INSTRUCTOR">Instructor (solicita bienes)</option>
           </select></label>
         <label v-if="auth.esManager && form.rol !== 'MANAGER'" class="f req"><span>Centro de formación</span>
           <select v-model="form.centro_id" required><option value="" disabled>Seleccione…</option><option v-for="c in centros.filter((c) => c.activo || c.id === form.centro_id)" :key="c.id" :value="c.id">{{ c.nombre }}</option></select></label>
         <label v-if="form.rol === 'LIDER'" class="f req"><span>Lote asignado</span><select v-model="form.lote_id" required><option value="" disabled>{{ lotesDelCentro.length ? 'Seleccione…' : 'El centro no tiene lotes' }}</option><option v-for="l in lotesDelCentro" :key="l.id" :value="l.id">{{ l.numero }}. {{ l.nombre }}</option></select></label>
+        <label v-if="conCoordinacion(form.rol)" class="f req"><span>Coordinación</span><select v-model="form.coordinacion_id" required><option value="" disabled>{{ coordsDelCentro.length ? 'Seleccione…' : 'El centro no tiene coordinaciones' }}</option><option v-for="c in coordsDelCentro" :key="c.id" :value="c.id">{{ c.nombre }}</option></select></label>
+        <label v-if="form.rol === 'COORDINADOR'" class="f"><span>Cargo (aparece en el GIL-F-014)</span><input v-model="form.cargo" maxlength="120" placeholder="Ej. Coordinador Académico" /></label>
+        <label class="f" :class="{ req: form.rol === 'INSTRUCTOR' }"><span>N° de identificación</span><input v-model="form.documento" inputmode="numeric" :required="form.rol === 'INSTRUCTOR'" /></label>
         <label class="f full" :class="{ req: !form.id }"><span>{{ form.id ? 'Nueva contraseña temporal (opcional)' : 'Contraseña temporal' }}</span><input v-model="form.password" type="text" :required="!form.id" placeholder="Mín. 8, mayúscula, número y especial" /></label>
       </form>
       <p v-if="form.rol === 'MANAGER'" class="small muted">El manager administra los centros, sus administradores, las vigencias y la configuración común, y consulta todos los centros.</p>

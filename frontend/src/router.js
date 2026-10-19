@@ -6,15 +6,27 @@ const A = (n) => () => import(`./views/admin/${n}.vue`)
 const L = (n) => () => import(`./views/lider/${n}.vue`)
 const M = (n) => () => import(`./views/manager/${n}.vue`)
 const AM = ['ADMIN', 'MANAGER']
+const E = (n) => () => import(`./views/entregas/${n}.vue`)
+const MODULO_ENTREGAS = ['INSTRUCTOR', 'COORDINADOR', 'LIDER', 'ADMIN', 'MANAGER']
 
 const routes = [
   { path: '/login', component: () => import('./views/Login.vue'), meta: { publica: true } },
+  { path: '/registro', component: () => import('./views/Registro.vue'), meta: { publica: true } },
   {
     path: '/',
     component: () => import('./components/Layout.vue'),
     children: [
       { path: '', redirect: () => useAuth().inicio },
       { path: 'cambiar-password', component: () => import('./views/CambiarPassword.vue') },
+      { path: 'perfil', component: () => import('./views/Perfil.vue') },
+      { path: 'instructor', component: E('MisSolicitudes'), meta: { rol: 'INSTRUCTOR' } },
+      { path: 'instructor/solicitar', component: E('Solicitar'), meta: { rol: 'INSTRUCTOR' } },
+      { path: 'instructor/solicitar/:id', component: E('Solicitar'), props: true, meta: { rol: 'INSTRUCTOR' } },
+      { path: 'entregas', component: E('Bandeja'), meta: { rol: ['COORDINADOR', 'LIDER', 'ADMIN', 'MANAGER'] } },
+      { path: 'entregas/:id', component: E('Detalle'), props: true, meta: { rol: MODULO_ENTREGAS } },
+      { path: 'coordinador/instructores', component: E('Instructores'), meta: { rol: ['COORDINADOR', 'ADMIN'] } },
+      { path: 'lider/inventario', component: E('Inventario'), meta: { rol: ['LIDER', 'ADMIN', 'MANAGER'] } },
+      { path: 'admin/coordinaciones', component: A('Coordinaciones'), meta: { rol: 'ADMIN' } },
       { path: 'reportes', component: () => import('./views/Reportes.vue') },
       { path: 'solicitudes/:id', component: () => import('./views/DetalleSolicitud.vue'), props: true },
       { path: 'admin', component: A('Dashboard'), meta: { rol: 'ADMIN' } },

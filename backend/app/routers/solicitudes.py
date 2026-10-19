@@ -13,7 +13,7 @@ from ..db import get_db
 from ..models import (
     Articulo, EstadoPost, Lote, PrecioHistorico, Solicitud, SolicitudHistorial, SolicitudItem, Usuario, Vigencia,
 )
-from ..security import admin_o_manager, solo_admin, solo_lider, usuario_actual
+from ..security import admin_o_manager, solo_admin, solo_lider, equipo_compras
 from ..services import excel_export, excel_import
 from ..services.common import (
     actividad, centro_de, get_or_404, lote_del_lider, notificar, notificar_admins, verificar_centro,
@@ -182,7 +182,7 @@ def guardar_items(sid: int, items: list[ItemIn], lider=Depends(solo_lider), db: 
 
 
 @router.get("/{sid}/plantilla")
-def plantilla_cantidades(sid: int, user=Depends(usuario_actual), db: Session = Depends(get_db)):
+def plantilla_cantidades(sid: int, user=Depends(equipo_compras), db: Session = Depends(get_db)):
     s = get_or_404(db, Solicitud, sid, "Solicitud")
     _acceso(user, s)
     arts = db.scalars(select(Articulo).where(Articulo.lote_id == s.lote_id, Articulo.activo.is_(True))
@@ -296,7 +296,7 @@ def enviar(sid: int, lider=Depends(solo_lider), db: Session = Depends(get_db)):
 # --- Administrador ------------------------------------------------------
 @router.get("")
 def bandeja(vigencia_id: int | None = None, lote_id: int | None = None, estado: str = "", lider_id: int | None = None,
-            centro_id: int | None = None, user=Depends(usuario_actual), db: Session = Depends(get_db)):
+            centro_id: int | None = None, user=Depends(equipo_compras), db: Session = Depends(get_db)):
     stmt = (select(Solicitud).join(Lote)
             .order_by(Solicitud.fecha_envio.is_(None), Solicitud.fecha_envio.desc(), Solicitud.id.desc()))
     centro = centro_de(user, centro_id)
@@ -340,7 +340,7 @@ def exportar_consolidado(vigencia_id: int, centro_id: int | None = None, user=De
 
 
 @router.get("/{sid}")
-def detalle(sid: int, user=Depends(usuario_actual), db: Session = Depends(get_db)):
+def detalle(sid: int, user=Depends(equipo_compras), db: Session = Depends(get_db)):
     s = get_or_404(db, Solicitud, sid, "Solicitud")
     _acceso(user, s)
     out = detalle_out(db, s)

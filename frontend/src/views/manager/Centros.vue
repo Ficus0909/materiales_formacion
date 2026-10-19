@@ -31,7 +31,7 @@ async function guardar() {
 // Por defecto el centro nuevo recibe el listado maestro del centro por defecto ('' = empezar vacío)
 function nuevo() {
   const origen = centros.value.find((c) => c.por_defecto && c.articulos) || centros.value.find((c) => c.articulos)
-  form.value = { codigo: '', nombre: '', regional: '', activo: true, listado_desde: origen?.id ?? '' }
+  form.value = { codigo: '', nombre: '', regional: '', codigo_regional: '', centro_costo: '', activo: true, listado_desde: origen?.id ?? '' }
 }
 const origenes = (destino) => centros.value.filter((c) => c.articulos && c.id !== destino?.id)
 function abrirCarga(c) {
@@ -93,6 +93,8 @@ async function eliminar(c) {
       <form id="fc" class="form-grid" @submit.prevent="guardar">
         <label class="f req"><span>Código</span><input v-model="form.codigo" maxlength="20" required placeholder="Ej. CASA" /></label>
         <label class="f"><span>Regional</span><input v-model="form.regional" placeholder="Ej. Santander" /></label>
+        <label class="f"><span>Código de la regional (GIL-F-014)</span><input v-model="form.codigo_regional" maxlength="5" placeholder="Ej. 68" /></label>
+        <label class="f"><span>Código del centro de costos (GIL-F-014)</span><input v-model="form.centro_costo" maxlength="20" placeholder="Ej. 912238" /></label>
         <label class="f req full"><span>Nombre</span><input v-model="form.nombre" required placeholder="Ej. Centro de Atención al Sector Agropecuario" /></label>
         <label v-if="!form.id" class="f full"><span>Listado maestro inicial</span>
           <select v-model="form.listado_desde">

@@ -31,13 +31,13 @@ async function entrar() {
     <section class="brand">
       <img src="/logo-sena-blanco.png" alt="SENA" class="logo" />
       <h1>Materiales de Formación</h1>
-      <p>Estudio de mercados y solicitudes por lote</p>
+      <p>Estudio de mercados, solicitudes por lote y entrega de materiales</p>
       <p class="small" style="opacity:.85">SENA · Centros de formación</p>
     </section>
     <section class="form">
       <form class="card" @submit.prevent="entrar">
         <h2>Iniciar sesión</h2>
-        <p class="sub" style="margin-top:-6px">Use su cuenta institucional asignada por el administrador.</p>
+        <p class="sub" style="margin-top:-6px">Use su cuenta institucional.</p>
         <label class="f req"><span>Correo institucional</span>
           <input v-model="email" type="email" autocomplete="username" placeholder="usuario@sena.edu.co" required />
         </label>
@@ -53,6 +53,7 @@ async function entrar() {
         </button>
         <p class="small muted" style="margin-top:14px">¿Olvidó su contraseña? Solicite al administrador del sistema una contraseña temporal.
           La cuenta se bloquea 15 minutos tras 3 intentos fallidos.</p>
+        <div class="registro">¿Es instructor y aún no tiene cuenta? <router-link to="/registro">Regístrese aquí</router-link></div>
       </form>
     </section>
   </div>
@@ -66,6 +67,7 @@ async function entrar() {
 .logo { width: 110px; height: auto; display: block; }
 .form { display: grid; place-items: center; padding: 24px 16px; }
 .form .card { width: 100%; max-width: 400px; padding: 28px; }
+.registro { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--borde); font-size: 13px; text-align: center; }
 @media (max-width: 800px) {
   .wrap { grid-template-columns: 1fr; }
   .brand { padding: 28px 20px; }

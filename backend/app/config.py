@@ -5,6 +5,26 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+def _cargar_env() -> None:
+    """En desarrollo lee el archivo .env de la raíz del proyecto (en Docker las variables llegan por
+    docker-compose). Las variables ya definidas en el entorno tienen prioridad. Las pruebas lo desactivan."""
+    archivo = BASE_DIR.parent / ".env"
+    if os.getenv("MATERIALES_SIN_DOTENV") == "1" or not archivo.is_file():
+        return
+    for linea in archivo.read_text(encoding="utf-8").splitlines():
+        linea = linea.strip()
+        if not linea or linea.startswith("#") or "=" not in linea:
+            continue
+        clave, valor = linea.split("=", 1)
+        valor = valor.strip()
+        if len(valor) >= 2 and valor[0] == valor[-1] and valor[0] in "\"'":
+            valor = valor[1:-1]
+        os.environ.setdefault(clave.strip(), valor)
+
+
+_cargar_env()
+
+
 class Settings:
     DATABASE_URL: str = os.getenv("DATABASE_URL", f"sqlite:///{BASE_DIR / 'data' / 'materiales.db'}")
     JWT_SECRET: str = os.getenv("JWT_SECRET", "cambiar-en-produccion-esta-clave-no-es-segura")
@@ -23,6 +43,16 @@ class Settings:
     CENTRO_CODIGO: str = os.getenv("CENTRO_CODIGO", "CASA")
     CENTRO_NOMBRE: str = os.getenv("CENTRO_NOMBRE", "Centro de Atención al Sector Agropecuario")
     CENTRO_REGIONAL: str = os.getenv("CENTRO_REGIONAL", "Santander")
+    CENTRO_COD_REGIONAL: str = os.getenv("CENTRO_COD_REGIONAL", "68")  # formato GIL-F-014
+    CENTRO_COSTO: str = os.getenv("CENTRO_COSTO", "912238")
+    # Coordinaciones con las que arranca el centro por defecto (separadas por "|")
+    COORDINACIONES: str = os.getenv("COORDINACIONES", "Coordinación Académica|Coordinación de Programas Especiales|"
+                                                      "Coordinación del Centro de Convivencia (Playón)")
+    # Autorregistro de instructores: dominios de correo permitidos (separados por coma; vacío = cualquiera)
+    REGISTRO_DOMINIOS: list[str] = [d.strip().lower() for d in os.getenv("REGISTRO_DOMINIOS", "sena.edu.co").split(",")
+                                    if d.strip()]
+    DIAS_HABILES_LEGALIZACION: int = int(os.getenv("DIAS_HABILES_LEGALIZACION", "15"))
+    DIAS_RECORDATORIO_EXTEMPORANEO: int = int(os.getenv("DIAS_RECORDATORIO_EXTEMPORANEO", "7"))
     # Correo (SMTP). Si SMTP_HOST está vacío, las notificaciones sólo quedan en la aplicación.
     SMTP_HOST: str = os.getenv("SMTP_HOST", "")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))

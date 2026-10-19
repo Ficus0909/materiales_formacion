@@ -16,18 +16,32 @@ const menu = computed(() => auth.esManager
   ? [
       ['/manager', 'Dashboard', '▦'], ['/manager/centros', 'Centros de formación', '⌂'], ['/admin/usuarios', 'Usuarios', '☺'],
       ['/admin/solicitudes', 'Solicitudes', '✉'], ['/reportes', 'Reportes', '▮'], ['/admin/vigencias', 'Vigencias', '◷'],
-      ['/admin/proveedores', 'Proveedores', '$'], ['/admin/configuracion', 'Configuración', '⚙'],
+      ['/admin/proveedores', 'Proveedores', '$'], ['/entregas', 'Entrega de materiales', '⇄'],
+      ['/admin/configuracion', 'Configuración', '⚙'],
+    ]
+  : auth.esCoordinador
+  ? [
+      ['/entregas', 'Solicitudes de bienes', '✉'], ['/coordinador/instructores', 'Instructores', '☺'],
+      ['/perfil', 'Mi firma y perfil', '✎'],
+    ]
+  : auth.esInstructor
+  ? [
+      ['/instructor', 'Mis solicitudes', '✉'], ['/instructor/solicitar', 'Solicitar materiales', '✚'],
+      ['/perfil', 'Mi perfil', '✎'],
     ]
   : auth.esAdmin
   ? [
       ['/admin', 'Dashboard', '▦'], ['/admin/solicitudes', 'Solicitudes', '✉'], ['/admin/analisis', 'Análisis de precios', '％'],
       ['/admin/listado-maestro', 'Listado maestro', '☰'], ['/admin/propuestas', 'Artículos propuestos', '✚'],
       ['/admin/proveedores', 'Proveedores', '⌂'], ['/admin/vigencias', 'Vigencias', '◷'], ['/admin/lotes', 'Lotes', '▤'],
-      ['/admin/usuarios', 'Usuarios', '☺'], ['/reportes', 'Reportes', '▮'], ['/admin/configuracion', 'Configuración', '⚙'],
+      ['/admin/usuarios', 'Usuarios', '☺'], ['/reportes', 'Reportes', '▮'],
+      ['/entregas', 'Entrega de materiales', '⇄'], ['/admin/coordinaciones', 'Coordinaciones', '◈'],
+      ['/coordinador/instructores', 'Instructores', '☺'], ['/admin/configuracion', 'Configuración', '⚙'],
     ]
   : [
       ['/lider', 'Mi dashboard', '▦'], ['/lider/mi-lote', 'Mi lote', '☰'], ['/lider/cotizaciones', 'Cotizaciones', '$'],
       ['/lider/mi-solicitud', 'Mi solicitud', '✉'], ['/lider/seguimiento', 'Seguimiento', '◉'], ['/reportes', 'Reportes', '▮'],
+      ['/entregas', 'Entregas a instructores', '⇄'], ['/lider/inventario', 'Inventario del lote', '▤'],
     ])
 
 async function cargarNotifs() {
@@ -55,7 +69,10 @@ onUnmounted(() => {
   window.removeEventListener('offline', onOff)
 })
 const rolTexto = computed(() => auth.esManager ? 'Manager · todos los centros'
-  : auth.esAdmin ? 'Administrador / Analista' : `Líder · ${auth.usuario?.lote?.nombre}`)
+  : auth.esAdmin ? 'Administrador / Analista'
+  : auth.esCoordinador ? `Coordinador · ${auth.usuario?.coordinacion?.nombre || ''}`
+  : auth.esInstructor ? `Instructor · ${auth.usuario?.coordinacion?.nombre || ''}`
+  : `Líder · ${auth.usuario?.lote?.nombre}`)
 const iniciales = computed(() => (auth.usuario?.nombre || '?').split(' ').map((p) => p[0]).slice(0, 2).join(''))
 </script>
 
@@ -86,7 +103,7 @@ const iniciales = computed(() => (auth.usuario?.nombre || '?').split(' ').map((p
     <aside class="side" :class="{ open: abierto }" @click="abierto = false">
       <nav>
         <router-link v-for="[to, txt, ic] in menu" :key="to" :to="to" class="it" :exact-active-class="'on'"
-                     :active-class="['/admin', '/lider', '/manager'].includes(to) ? '' : 'on'">
+                     :active-class="['/admin', '/lider', '/manager', '/instructor'].includes(to) ? '' : 'on'">
           <span class="ic">{{ ic }}</span>{{ txt }}
         </router-link>
       </nav>

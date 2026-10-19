@@ -2,6 +2,8 @@
 
 PWA para el **estudio de mercados** y las **solicitudes por lote** de materiales de formación. Su punto de partida es el listado maestro de fichas técnicas del SENA (Centro de Atención al Sector Agropecuario, Regional Santander).
 
+Incluye el módulo de **entrega de materiales a instructores** con el formato **GIL-F-014** (solicitud de bienes para uso de cuentadantes). El instructor solicita, el coordinador aprueba con su firma digital, el líder del lote entrega (y se descuenta su inventario) y el instructor legaliza con el acta y 3 fotos en un plazo de 15 días hábiles.
+
 Funciona para **varios centros de formación**. Cada centro tiene su propio listado maestro, lotes, líderes, cotizaciones y solicitudes, y lo administra su administrador. Por encima de los administradores está el **manager**, que crea los centros y sus administradores, gestiona las vigencias y la configuración común, y consulta todos los centros.
 
 Las reglas de negocio y las decisiones tomadas están en **[docs/REGLAS_NEGOCIO.md](docs/REGLAS_NEGOCIO.md)**.
@@ -36,6 +38,8 @@ npm run dev          # http://localhost:5173 (proxy /api → :8000)
 
 Si `npm run build` genera `frontend/dist`, la API también sirve la PWA en http://localhost:8000.
 
+En desarrollo el backend lee el archivo `.env` de la raíz del proyecto, si existe (por ejemplo, para el correo SMTP). Las variables del entorno tienen prioridad, y las pruebas nunca lo usan. Con Gmail, `SMTP_PASSWORD` debe ser una **contraseña de aplicación**: la clave normal de la cuenta no sirve.
+
 Usuarios de la carga `--demo`:
 
 | Rol | Correo | Clave |
@@ -43,6 +47,8 @@ Usuarios de la carga `--demo`:
 | Manager (todos los centros) | manager@sena.edu.co | Manager123! |
 | Administrador del centro CASA | admin@sena.edu.co | Admin123! |
 | Líder (uno por lote, 11 lotes del centro CASA) | lider.agric@sena.edu.co, lider.pecua@sena.edu.co, … | Lider123! |
+
+Los **coordinadores** los crea el administrador del centro en Usuarios. Los **instructores** se registran solos desde la pantalla de inicio de sesión («Regístrese aquí») y entran cuando su coordinador aprueba la cuenta.
 
 La carga demo crea la vigencia 2026 cerrada (los precios del estudio firmado quedan como históricos), la vigencia **2027 abierta** y 4 proveedores. El listado maestro del Excel se carga en el centro por defecto (`CENTRO_CODIGO`, CASA).
 
@@ -52,7 +58,7 @@ La carga demo crea la vigencia 2026 cerrada (los precios del estudio firmado que
 
 ```bash
 cd backend
-python -m pytest tests -q        # 27 pruebas: reglas de cálculo, seguridad, correo, flujo completo y aislamiento entre centros
+python -m pytest tests -q        # 38 pruebas: cálculo, seguridad, correo, flujo, centros y entrega de materiales
 ```
 
 ## Producción (Docker)
@@ -79,12 +85,15 @@ La primera vez, si `SEED_EXCEL` apunta al Excel (la carpeta `contexto/` se monta
 backend/app/
   models.py              entidades
   migraciones.py         migración del esquema a centros de formación
-  routers/               auth, admin (centros, usuarios…), articulos, cotizaciones, analisis, solicitudes, tablero
+  routers/               auth, admin (centros, usuarios…), articulos, cotizaciones, analisis, solicitudes, tablero,
+                         entregas (formato GIL-F-014)
+  services/entregas.py   inventario del lote, días hábiles, avisos de legalización extemporánea
+  services/pdf_entregas.py  PDF del GIL-F-014 y del informe de entregas
   services/pricing.py    motor de análisis de precios
   services/excel_*.py    importación y exportación Excel
   seed.py                datos iniciales
 backend/tests/           pruebas (pytest)
-frontend/src/views/      pantallas manager/, admin/ y lider/
+frontend/src/views/      pantallas manager/, admin/, lider/ y entregas/ (instructores y coordinadores)
 docs/REGLAS_NEGOCIO.md
 contexto/                documentos fuente
 ```

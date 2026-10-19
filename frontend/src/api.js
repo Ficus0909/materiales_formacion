@@ -61,6 +61,8 @@ export const api = {
     setTimeout(() => URL.revokeObjectURL(a.href), 2000)
   },
   pdfUrl: (cid) => `/api/cotizaciones/${cid}/pdf?token=${encodeURIComponent(token.get() || '')}`,
+  // Enlace directo a un archivo protegido de la API (PDF, imágenes) para abrirlo en otra pestaña
+  archivoUrl: (ruta) => `/api${ruta}${ruta.includes('?') ? '&' : '?'}token=${encodeURIComponent(token.get() || '')}`,
 }
 
 export const qs = (o) => {

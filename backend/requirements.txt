@@ -8,5 +8,7 @@ bcrypt>=4.2
 python-multipart>=0.0.20
 openpyxl>=3.1
 pillow>=11  # logo en los Excel exportados
+reportlab>=4.2  # PDF del formato GIL-F-014 y del informe de entregas
+holidays>=0.60  # festivos de Colombia (plazo de 15 días hábiles para legalizar)
 pymysql>=1.1
 cryptography>=43

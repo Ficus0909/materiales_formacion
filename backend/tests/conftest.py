@@ -5,6 +5,7 @@ _tmp = tempfile.mkdtemp()
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp}/test.db"
 os.environ["UPLOAD_DIR"] = f"{_tmp}/uploads"
 os.environ["SKIP_INIT_DB"] = "1"
+os.environ["MATERIALES_SIN_DOTENV"] = "1"  # las pruebas nunca usan el .env (ni envían correos reales)
 os.environ["FRONTEND_DIST"] = f"{_tmp}/no-dist"
 
 import pytest  # noqa: E402

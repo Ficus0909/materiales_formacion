@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import get_db
 from ..models import Articulo, Cotizacion, CotizacionItem, Lote, Proveedor, Solicitud, Usuario, Vigencia
-from ..security import operador, solo_admin, usuario_actual
+from ..security import operador, solo_admin, equipo_compras
 from ..services import excel_export, excel_import
 from ..services.common import actividad, centro_de, get_or_404, lote_accesible, lote_del_lider, verificar_centro
 from ..services.pricing import param
@@ -51,7 +51,7 @@ def cotizacion_out(c: Cotizacion, detalle: bool = False) -> dict:
 
 
 @router.get("")
-def listar(vigencia_id: int, lote_id: int | None = None, centro_id: int | None = None, user=Depends(usuario_actual),
+def listar(vigencia_id: int, lote_id: int | None = None, centro_id: int | None = None, user=Depends(equipo_compras),
            db: Session = Depends(get_db)):
     stmt = (select(Cotizacion).join(Lote).where(Cotizacion.vigencia_id == vigencia_id)
             .order_by(Cotizacion.lote_id, Cotizacion.etiqueta))
@@ -67,7 +67,7 @@ def listar(vigencia_id: int, lote_id: int | None = None, centro_id: int | None =
 
 @router.get("/plantilla")
 def plantilla(vigencia_id: int, lote_id: int | None = None, cotizacion_id: int | None = None,
-              user=Depends(usuario_actual), db: Session = Depends(get_db)):
+              user=Depends(equipo_compras), db: Session = Depends(get_db)):
     lote = lote_accesible(db, user, lote_id)
     vig = get_or_404(db, Vigencia, vigencia_id, "Vigencia")
     arts = db.scalars(select(Articulo).where(Articulo.lote_id == lote.id, Articulo.activo.is_(True))
@@ -181,7 +181,7 @@ async def crear(proveedor_id: int = Form(...), fecha: date = Form(...), lote_id:
 
 @router.get("/zip")
 def descargar_zip(vigencia_id: int, lote_id: int | None = None, centro_id: int | None = None,
-                  user=Depends(usuario_actual), db: Session = Depends(get_db)):
+                  user=Depends(equipo_compras), db: Session = Depends(get_db)):
     cots = listar(vigencia_id, lote_id, centro_id, user, db)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -195,14 +195,14 @@ def descargar_zip(vigencia_id: int, lote_id: int | None = None, centro_id: int |
 
 
 @router.get("/{cid}")
-def detalle(cid: int, user=Depends(usuario_actual), db: Session = Depends(get_db)):
+def detalle(cid: int, user=Depends(equipo_compras), db: Session = Depends(get_db)):
     c = get_or_404(db, Cotizacion, cid, "Cotización")
     _acceso(user, c)
     return cotizacion_out(c, True)
 
 
 @router.get("/{cid}/pdf")
-def ver_pdf(cid: int, user=Depends(usuario_actual), db: Session = Depends(get_db)):
+def ver_pdf(cid: int, user=Depends(equipo_compras), db: Session = Depends(get_db)):
     c = get_or_404(db, Cotizacion, cid, "Cotización")
     _acceso(user, c)
     ruta = settings.UPLOAD_DIR / c.pdf_path

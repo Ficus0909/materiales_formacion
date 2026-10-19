@@ -22,6 +22,9 @@ export const ESTADOS = {
   ABIERTA: { label: 'Abierta', color: '#39A909' },
   CERRADA: { label: 'Cerrada', color: '#1E3A5F' },
   PENDIENTE: { label: 'Pendiente', color: '#FD7E14' },
+  ENTREGADA: { label: 'Entregada', color: '#17A2B8' },
+  LEGALIZADA: { label: 'Legalizada', color: '#007832' },
+  EXTEMPORANEA: { label: 'Extemporánea', color: '#DC3545' },
 }
 
 export const SOPORTE = {

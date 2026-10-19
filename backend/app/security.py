@@ -46,6 +46,8 @@ def usuario_actual(request: Request, db: Session = Depends(get_db)) -> Usuario:
         raise HTTPException(401, "Usuario inactivo")
     if user.centro and not user.centro.activo:
         raise HTTPException(401, "El centro de formación está inactivo")
+    if not user.aprobado:
+        raise HTTPException(401, "Su registro está pendiente de aprobación")
     return user
 
 
@@ -63,3 +65,5 @@ solo_admin = requiere("ADMIN")
 solo_lider = requiere("LIDER")
 admin_o_manager = requiere("ADMIN", "MANAGER")
 operador = requiere("ADMIN", "LIDER")  # operan dentro de su centro; el manager sólo consulta
+# Estudio de mercados y solicitudes por lote: no es para instructores ni coordinadores (módulo de entregas)
+equipo_compras = requiere("MANAGER", "ADMIN", "LIDER")

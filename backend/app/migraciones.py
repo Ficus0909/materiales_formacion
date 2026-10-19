@@ -100,3 +100,43 @@ def migrar_centros(engine: Engine, codigo: str, nombre: str, regional: str) -> b
     engine.dispose()  # ninguna conexión del pool conserva el estado de la migración
     return True
 
+
+
+# --- Entrega de materiales (formato GIL-F-014) -------------------------------
+COLUMNAS_NUEVAS = {
+    # tabla: [(columna, definición SQL compatible con SQLite y MariaDB)]
+    "centros": [("codigo_regional", "VARCHAR(5) NOT NULL DEFAULT ''"),
+                ("centro_costo", "VARCHAR(20) NOT NULL DEFAULT ''")],
+    "usuarios": [("coordinacion_id", "INTEGER NULL REFERENCES coordinaciones (id)"),
+                 ("documento", "VARCHAR(20) NOT NULL DEFAULT ''"),
+                 ("cargo", "VARCHAR(120) NOT NULL DEFAULT ''"),
+                 ("firma_path", "VARCHAR(300) NOT NULL DEFAULT ''"),
+                 ("aprobado", "BOOLEAN NOT NULL DEFAULT 1")],
+}
+
+
+def migrar_entregas(engine: Engine) -> bool:
+    """Agrega las columnas del módulo de entregas a bases existentes (idempotente). Las tablas nuevas
+    las crea `create_all`. En MariaDB también amplía `usuarios.rol` (COORDINADOR tiene 11 caracteres)."""
+    mysql = engine.dialect.name in ("mysql", "mariadb")
+    cambios = False
+    with engine.begin() as conn:
+        for tabla, columnas in COLUMNAS_NUEVAS.items():
+            existentes = _columnas(conn, tabla)
+            for col, ddl in columnas:
+                if col not in existentes:
+                    if mysql and "REFERENCES" in ddl:
+                        conn.exec_driver_sql(f"ALTER TABLE {tabla} ADD COLUMN {col} INTEGER NULL")
+                        conn.exec_driver_sql(f"ALTER TABLE {tabla} ADD CONSTRAINT fk_{tabla}_{col} "
+                                             f"FOREIGN KEY ({col}) REFERENCES coordinaciones (id)")
+                    else:
+                        conn.exec_driver_sql(f"ALTER TABLE {tabla} ADD COLUMN {col} {ddl}")
+                    cambios = True
+        if mysql:
+            rol = next(c for c in inspect(conn).get_columns("usuarios") if c["name"] == "rol")
+            if getattr(rol["type"], "length", 15) < 15:
+                conn.exec_driver_sql("ALTER TABLE usuarios MODIFY rol VARCHAR(15) NOT NULL")
+                cambios = True
+    if cambios:
+        log.warning("Base de datos migrada para el módulo de entrega de materiales")
+    return cambios

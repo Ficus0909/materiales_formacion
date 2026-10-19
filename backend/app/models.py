@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
 
 # --- Catálogos de estados -------------------------------------------------
-ROLES = ("MANAGER", "ADMIN", "LIDER")
+ROLES = ("MANAGER", "ADMIN", "LIDER", "COORDINADOR", "INSTRUCTOR")
 VIGENCIA_ESTADOS = ("PROGRAMADA", "ABIERTA", "CERRADA")
 SOLICITUD_ESTADOS = ("BORRADOR", "ENVIADA", "EN_REVISION", "DEVUELTA", "APROBADA", "RECHAZADA", "CANCELADA")
 METODOS_PRECIO = ("COTIZACIONES", "HISTORICOS", "EXPERTO")
@@ -23,8 +23,20 @@ class Centro(Base):
     codigo: Mapped[str] = mapped_column(String(20), unique=True)
     nombre: Mapped[str] = mapped_column(String(160), unique=True)
     regional: Mapped[str] = mapped_column(String(120), default="")
+    codigo_regional: Mapped[str] = mapped_column(String(5), default="")  # F-014: código de la regional (ej. 68)
+    centro_costo: Mapped[str] = mapped_column(String(20), default="")  # F-014: código del centro de costos
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Coordinacion(Base):
+    """Coordinación del centro a la que pertenecen instructores y coordinadores (área del formato F-014)."""
+    __tablename__ = "coordinaciones"
+    __table_args__ = (UniqueConstraint("centro_id", "nombre", name="uq_coordinacion_centro_nombre"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    centro_id: Mapped[int] = mapped_column(ForeignKey("centros.id", ondelete="RESTRICT"), index=True)
+    nombre: Mapped[str] = mapped_column(String(120))
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
 class Lote(Base):
@@ -49,9 +61,14 @@ class Usuario(Base):
     nombre: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(160), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(100))
-    rol: Mapped[str] = mapped_column(String(10))
+    rol: Mapped[str] = mapped_column(String(15))
     centro_id: Mapped[int | None] = mapped_column(ForeignKey("centros.id", ondelete="RESTRICT"), index=True)  # None = MANAGER
     lote_id: Mapped[int | None] = mapped_column(ForeignKey("lotes.id", ondelete="RESTRICT"))
+    coordinacion_id: Mapped[int | None] = mapped_column(ForeignKey("coordinaciones.id", ondelete="RESTRICT"))
+    documento: Mapped[str] = mapped_column(String(20), default="")  # N° de identificación (cuentadante F-014)
+    cargo: Mapped[str] = mapped_column(String(120), default="")  # coordinador: CARGO en el F-014
+    firma_path: Mapped[str] = mapped_column(String(300), default="")  # imagen de la firma del coordinador
+    aprobado: Mapped[bool] = mapped_column(Boolean, default=True)  # False = autorregistro pendiente de aprobación
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     debe_cambiar_password: Mapped[bool] = mapped_column(Boolean, default=True)
     intentos_fallidos: Mapped[int] = mapped_column(Integer, default=0)
@@ -60,6 +77,7 @@ class Usuario(Base):
 
     centro: Mapped[Centro | None] = relationship()
     lote: Mapped[Lote | None] = relationship(back_populates="lideres")
+    coordinacion: Mapped[Coordinacion | None] = relationship()
 
 
 class Vigencia(Base):
@@ -274,5 +292,97 @@ class Actividad(Base):
     accion: Mapped[str] = mapped_column(String(300))
     enlace: Mapped[str] = mapped_column(String(200), default="")
     fecha: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+
+    usuario: Mapped[Usuario | None] = relationship()
+
+
+# --- Entrega de materiales a instructores (formato GIL-F-014) ----------------
+ENTREGA_ESTADOS = ("ENVIADA", "DEVUELTA", "APROBADA", "ENTREGADA", "LEGALIZADA")
+
+
+class Entrega(Base):
+    """Solicitud de bienes de un instructor (formato GIL-F-014) sobre el material recibido de un lote.
+    ENVIADA → (DEVUELTA → ENVIADA) → APROBADA (firma del coordinador) → ENTREGADA (líder) → LEGALIZADA
+    (acta + 3 fotos, plazo de 15 días hábiles desde la entrega)."""
+    __tablename__ = "entregas"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lote_id: Mapped[int] = mapped_column(ForeignKey("lotes.id", ondelete="RESTRICT"), index=True)
+    coordinacion_id: Mapped[int] = mapped_column(ForeignKey("coordinaciones.id", ondelete="RESTRICT"), index=True)
+    instructor_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id", ondelete="RESTRICT"), index=True)
+    estado: Mapped[str] = mapped_column(String(12), default="ENVIADA", index=True)
+    fecha_solicitud: Mapped[date] = mapped_column(Date)
+    tipo_cuentadante: Mapped[str] = mapped_column(String(12), default="UNIPERSONAL")  # UNIPERSONAL | MULTIPLE
+    nombre_cuentadante: Mapped[str] = mapped_column(String(160))
+    documento_cuentadante: Mapped[str] = mapped_column(String(30), default="")
+    destino: Mapped[str] = mapped_column(String(15), default="FORMACION")  # FORMACION | ADMINISTRATIVA
+    ficha: Mapped[str] = mapped_column(String(60), default="")
+    observaciones_coordinador: Mapped[str] = mapped_column(Text, default="")
+    coordinador_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    firma_path: Mapped[str] = mapped_column(String(300), default="")  # copia de la firma al aprobar
+    fecha_aprobacion: Mapped[datetime | None] = mapped_column(DateTime)
+    entregado_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    fecha_entrega: Mapped[date | None] = mapped_column(Date)
+    fecha_limite_legalizacion: Mapped[date | None] = mapped_column(Date)
+    fecha_legalizacion: Mapped[datetime | None] = mapped_column(DateTime)
+    ultimo_aviso_extemporaneo: Mapped[date | None] = mapped_column(Date)
+    avisos_extemporaneo: Mapped[int] = mapped_column(Integer, default=0)
+    creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    actualizado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    lote: Mapped[Lote] = relationship()
+    coordinacion: Mapped[Coordinacion] = relationship()
+    instructor: Mapped[Usuario] = relationship(foreign_keys=[instructor_id])
+    coordinador: Mapped[Usuario | None] = relationship(foreign_keys=[coordinador_id])
+    lider: Mapped[Usuario | None] = relationship(foreign_keys=[entregado_por])
+    items: Mapped[list["EntregaItem"]] = relationship(back_populates="entrega", cascade="all, delete-orphan")
+    integrantes: Mapped[list["EntregaIntegrante"]] = relationship(cascade="all, delete-orphan")
+    evidencias: Mapped[list["EntregaEvidencia"]] = relationship(cascade="all, delete-orphan")
+
+
+class EntregaItem(Base):
+    """Bien solicitado: sale del material recibido de un lote (ítem de una solicitud aprobada)."""
+    __tablename__ = "entrega_items"
+    __table_args__ = (UniqueConstraint("entrega_id", "solicitud_item_id", name="uq_entrega_item"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entrega_id: Mapped[int] = mapped_column(ForeignKey("entregas.id", ondelete="CASCADE"), index=True)
+    solicitud_item_id: Mapped[int] = mapped_column(ForeignKey("solicitud_items.id", ondelete="RESTRICT"), index=True)
+    cantidad_solicitada: Mapped[float] = mapped_column(Float)
+    cantidad_entregada: Mapped[float | None] = mapped_column(Float)  # la diligencia el líder al entregar
+    observacion: Mapped[str] = mapped_column(String(300), default="")
+
+    entrega: Mapped[Entrega] = relationship(back_populates="items")
+    solicitud_item: Mapped[SolicitudItem] = relationship()
+
+
+class EntregaIntegrante(Base):
+    """Personas que conforman un cuentadante múltiple."""
+    __tablename__ = "entrega_integrantes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entrega_id: Mapped[int] = mapped_column(ForeignKey("entregas.id", ondelete="CASCADE"), index=True)
+    nombre: Mapped[str] = mapped_column(String(160))
+    documento: Mapped[str] = mapped_column(String(30))
+
+
+class EntregaEvidencia(Base):
+    """Legalización: acta de entrega firmada (escaneada) y fotos de la entrega a los aprendices."""
+    __tablename__ = "entrega_evidencias"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entrega_id: Mapped[int] = mapped_column(ForeignKey("entregas.id", ondelete="CASCADE"), index=True)
+    tipo: Mapped[str] = mapped_column(String(5))  # ACTA | FOTO
+    path: Mapped[str] = mapped_column(String(300))
+    nombre: Mapped[str] = mapped_column(String(200))
+    creado: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class EntregaHistorial(Base):
+    """Bitácora inmutable de la solicitud de bienes."""
+    __tablename__ = "entrega_historial"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entrega_id: Mapped[int] = mapped_column(ForeignKey("entregas.id", ondelete="CASCADE"), index=True)
+    estado_anterior: Mapped[str] = mapped_column(String(12), default="")
+    estado_nuevo: Mapped[str] = mapped_column(String(30))
+    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"))
+    observaciones: Mapped[str] = mapped_column(Text, default="")
+    fecha: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     usuario: Mapped[Usuario | None] = relationship()

@@ -128,6 +128,7 @@ Cierre de vigencia: BORRADOR / DEVUELTA ─► CANCELADA
 ### Correo
 - Se envía correo a la persona notificada en estos casos:
   - el manager o el administrador crea un usuario o le restablece la contraseña (credenciales temporales);
+  - se designa a un **líder de lote**, al crearlo, al cambiarle el lote o al convertir a un usuario en líder. El correo dice el lote, el centro y la **vigencia del proceso** (la abierta con su plazo o, si no hay, la próxima programada) y lo que le corresponde hacer. Al crearlo incluye también las credenciales en el mismo correo. Además queda un aviso en la aplicación;
   - se abre una vigencia (a los líderes y administradores de todos los centros activos);
   - un líder envía o reenvía su solicitud, o propone un artículo (a los administradores **de su centro**);
   - una solicitud pasa a revisión, se aprueba, se devuelve, se rechaza, se cancela al cerrar la vigencia o avanza en el ciclo de compra (al líder);
@@ -141,6 +142,67 @@ Cierre de vigencia: BORRADOR / DEVUELTA ─► CANCELADA
 - Cambio obligatorio de la contraseña temporal en el primer ingreso.
 - Cada endpoint valida el rol y el centro. El líder solo accede a datos de su lote. El administrador solo accede a datos de su centro: usuarios, lotes, artículos, cotizaciones, PDF, análisis, propuestas, solicitudes, tablero y actividad. El manager consulta todos los centros, pero solo modifica centros, usuarios y la configuración común.
 - Los usuarios con historial no se eliminan: se desactivan.
+
+## 4b. Entrega de materiales a instructores (formato GIL-F-014)
+
+Fuente: `contexto/FORMATO GIL 014 MODELO.xlsx`, Formato solicitud de bienes para uso de cuentadantes, versión 07, proceso Gestión de Infraestructura y Logística.
+
+### Roles
+- **Instructor**:
+  - se registra solo con su correo institucional (dominios en `REGISTRO_DOMINIOS`), su número de identificación, su centro y su coordinación;
+  - entra cuando el coordinador de su coordinación aprueba la cuenta, o el administrador si la coordinación aún no tiene coordinador;
+  - solicita bienes de cualquier lote de su centro y legaliza la entrega.
+- **Coordinador**, uno o varios por coordinación:
+  - lo crea el administrador del centro, que puede registrar su cargo para el formato;
+  - aprueba o rechaza los registros de instructores de su coordinación;
+  - revisa las solicitudes y las **aprueba con su firma digital** o las **devuelve** con observaciones.
+- **Líder de lote**: registra la entrega de las solicitudes aprobadas de su lote, consulta el inventario y genera el informe en PDF o CSV.
+- **Administrador**:
+  - gestiona las coordinaciones de su centro;
+  - gestiona coordinadores e instructores igual que a los líderes;
+  - consulta todas las solicitudes del centro.
+- **Manager**: consulta todos los centros.
+- Instructores y coordinadores **no acceden** al estudio de mercados (cotizaciones, análisis, solicitudes por lote, reportes).
+
+### Coordinaciones
+- Cada centro tiene las suyas. CASA arranca con Académica, Programas Especiales y Centro de Convivencia (Playón).
+- La coordinación es el **ÁREA** del formato. El centro registra además su **código de regional** y su **código de centro de costos**, que también van en el formato.
+
+### Inventario del lote
+- El material disponible es el de las solicitudes del lote **aprobadas y en el último estado del ciclo de compra** («En el Punto»), con su cantidad y su **precio aprobado** (congelado).
+- **Saldo = recibido − entregado − reservado.**
+  - Lo aprobado por el coordinador queda **reservado** hasta la entrega.
+  - Al entregar se descuenta lo **entregado**, en cantidad y en valor. Lo no entregado vuelve al saldo.
+- Al solicitar, la cantidad no puede superar el saldo. Al aprobar se verifica otra vez: si otra solicitud aprobada consumió el saldo, el coordinador debe devolverla.
+
+### Flujo y reglas
+```
+ENVIADA ─► APROBADA (firma del coordinador) ─► ENTREGADA (líder) ─► LEGALIZADA (acta + fotos)
+   └─► DEVUELTA ─► (el instructor corrige) ─► ENVIADA
+```
+- **Solicitud**: lote, coordinación, destino (Formación o Área administrativa) y bienes con cantidad. La ficha o grupo es obligatoria si el destino es Formación.
+  - **Cuentadante unipersonal**: el propio instructor, con su número de identificación (obligatorio en su perfil).
+  - **Cuentadante múltiple**: nombre del grupo y al menos dos integrantes con nombre y número de identificación.
+- Mientras está enviada o devuelta, el instructor puede corregirla o anularla. Una solicitud aprobada no se anula.
+- **Devolver** exige observaciones.
+- **Aprobar** exige que el coordinador haya cargado su firma (PNG o JPG). Se guarda una **copia inmutable** de la firma en la solicitud, así que cambiarla después no altera los formatos ya aprobados.
+- **Entrega**: el líder diligencia la **cantidad entregada** de cada bien, entre 0 y la solicitada, porque según el formato «la cantidad entregada puede ser inferior a la solicitada». La fecha de entrega no puede ser futura.
+- **Legalización**:
+  - el instructor carga el **acta de entrega física** firmada (PDF o imagen) y **entre 3 y 5 fotos** de la entrega a los aprendices;
+  - se valida el tipo real de cada archivo y un máximo de 10 MB;
+  - el plazo es de **15 días hábiles** desde la fecha de entrega, sin contar sábados, domingos ni **festivos de Colombia**.
+- **Extemporánea**:
+  - pasado el plazo sin legalizar, una revisión automática (cada 6 horas) envía al instructor el correo «el proceso de legalización de entrega se encuentra extemporáneo… realícelo de inmediato», con un aviso en la aplicación;
+  - se repite **cada 7 días** mientras no legalice;
+  - el líder y el coordinador la ven marcada;
+  - si legaliza tarde, el historial lo registra.
+- El formato **GIL-F-014 en PDF** replica el original: encabezado, datos del centro, cuentadante, destino, ficha, bienes con cantidad solicitada y entregada, y nombre, cargo y firma del coordinador. Antes de aprobarse lleva la leyenda «pendiente de aprobación».
+- **Informe del líder** (PDF o CSV, con filtro de fechas): saldo del inventario por artículo, y entregas con instructor, coordinación, ficha, artículos, valor y estado de la legalización.
+
+### Correos del módulo
+- Registro de instructor: al coordinador (o al administrador) y acuse al instructor. Al aprobar o rechazar el registro, al instructor.
+- Solicitud enviada o corregida: a los coordinadores de la coordinación. Devuelta o aprobada: al instructor. Aprobada: también a los líderes del lote.
+- Entregada: al instructor, con la fecha límite. Legalizada: a los líderes del lote. Extemporánea: al instructor.
 
 ## 5. Calidad de datos encontrada en el Excel 2026
 

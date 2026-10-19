@@ -13,11 +13,12 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..db import get_db
 from ..models import (
-    ROLES, Articulo, Centro, Cotizacion, EstadoPost, IndiceAjuste, Lote, Parametro, Proveedor, Solicitud,
+    ROLES, Articulo, Centro, Coordinacion, Cotizacion, Entrega, EntregaHistorial, EstadoPost, IndiceAjuste, Lote, Notificacion, Parametro, Proveedor, Solicitud,
     SolicitudHistorial, Usuario, Vigencia,
 )
 from ..security import (
-    admin_o_manager, hash_password, solo_admin, solo_manager, usuario_actual, validar_password,
+    admin_o_manager, equipo_compras, hash_password, requiere, solo_admin, solo_manager, usuario_actual,
+    validar_password,
 )
 from ..services import correo
 from ..services.common import actividad, centro_de, get_or_404, notificar, verificar_centro
@@ -25,7 +26,9 @@ from ..services.pricing import PARAMETROS_DEFECTO
 from .auth import usuario_out
 
 router = APIRouter(tags=["administración"])
-NOMBRE_ROL = {"MANAGER": "Manager", "ADMIN": "Administrador / Analista", "LIDER": "Líder de lote"}
+NOMBRE_ROL = {"MANAGER": "Manager", "ADMIN": "Administrador / Analista", "LIDER": "Líder de lote",
+              "COORDINADOR": "Coordinador", "INSTRUCTOR": "Instructor"}
+GESTIONA_ADMIN = ("LIDER", "COORDINADOR", "INSTRUCTOR")  # roles que el administrador gestiona en su centro
 
 
 # --- Centros de formación -----------------------------------------------
@@ -33,6 +36,8 @@ class CentroIn(BaseModel):
     codigo: str
     nombre: str
     regional: str = ""
+    codigo_regional: str = ""  # GIL-F-014
+    centro_costo: str = ""  # GIL-F-014
     activo: bool = True
     # Sólo al crear: carga el listado maestro (lotes y artículos activos) de otro centro.
     # Por defecto se copia el del centro por defecto (CENTRO_CODIGO).
@@ -44,6 +49,7 @@ def centro_out(db: Session, c: Centro) -> dict:
     usuarios = dict(db.execute(select(Usuario.rol, func.count()).where(Usuario.centro_id == c.id, Usuario.activo.is_(True))
                                .group_by(Usuario.rol)).all())
     return {"id": c.id, "codigo": c.codigo, "nombre": c.nombre, "regional": c.regional, "activo": c.activo,
+            "codigo_regional": c.codigo_regional, "centro_costo": c.centro_costo,
             "por_defecto": c.codigo == settings.CENTRO_CODIGO,
             "lotes": db.scalar(select(func.count()).select_from(Lote).where(Lote.centro_id == c.id)),
             "articulos": db.scalar(select(func.count()).select_from(Articulo).join(Lote).where(
@@ -96,7 +102,8 @@ def copiar_listado(db: Session, origen: Centro, destino: Centro) -> dict:
 def crear_centro(data: CentroIn, manager=Depends(solo_manager), db: Session = Depends(get_db)):
     _validar_centro(db, data)
     origen = _centro_origen_listado(db, data.listado_desde) if data.cargar_listado else None
-    c = Centro(codigo=data.codigo.strip(), nombre=data.nombre.strip(), regional=data.regional.strip(), activo=data.activo)
+    c = Centro(codigo=data.codigo.strip(), nombre=data.nombre.strip(), regional=data.regional.strip(), activo=data.activo,
+               codigo_regional=data.codigo_regional.strip(), centro_costo=data.centro_costo.strip())
     db.add(c)
     db.flush()
     copiado = copiar_listado(db, origen, c) if origen else None
@@ -136,6 +143,7 @@ def editar_centro(cid: int, data: CentroIn, manager=Depends(solo_manager), db: S
     if c.activo and not data.activo:
         actividad(db, manager, f"Desactivó el centro de formación {c.nombre}: sus usuarios ya no pueden ingresar")
     c.codigo, c.nombre, c.regional, c.activo = data.codigo.strip(), data.nombre.strip(), data.regional.strip(), data.activo
+    c.codigo_regional, c.centro_costo = data.codigo_regional.strip(), data.centro_costo.strip()
     db.commit()
     return centro_out(db, c)
 
@@ -157,6 +165,9 @@ class UsuarioIn(BaseModel):
     rol: str
     centro_id: int | None = None
     lote_id: int | None = None
+    coordinacion_id: int | None = None  # coordinadores e instructores
+    documento: str = ""
+    cargo: str = ""  # coordinadores: cargo en el GIL-F-014 (vacío = se deduce de la coordinación)
     activo: bool = True
     password: str | None = None
 
@@ -169,11 +180,11 @@ class UsuarioIn(BaseModel):
 
 
 def _puede_gestionar(actor: Usuario, rol: str, centro_id: int | None) -> None:
-    """El manager gestiona a todos; el administrador sólo a los líderes de su centro."""
+    """El manager gestiona a todos; el administrador, a líderes, coordinadores e instructores de su centro."""
     if actor.rol == "MANAGER":
         return
-    if rol != "LIDER" or centro_id != actor.centro_id:
-        raise HTTPException(403, "Sólo puede gestionar los líderes de su centro. "
+    if rol not in GESTIONA_ADMIN or centro_id != actor.centro_id:
+        raise HTTPException(403, "Sólo puede gestionar los líderes, coordinadores e instructores de su centro. "
                                  "Los administradores los gestiona el manager.")
 
 
@@ -195,6 +206,15 @@ def _validar_usuario(db: Session, data: UsuarioIn, actor: Usuario, uid: int | No
             raise HTTPException(422, "El lote asignado no pertenece al centro del usuario")
     else:
         data.lote_id = None
+    if data.rol in ("COORDINADOR", "INSTRUCTOR"):
+        coord = get_or_404(db, Coordinacion, data.coordinacion_id or 0, "Coordinación")
+        if coord.centro_id != data.centro_id:
+            raise HTTPException(422, "La coordinación no pertenece al centro del usuario")
+    else:
+        data.coordinacion_id = None
+    if data.documento.strip() or data.rol == "INSTRUCTOR":
+        from .auth import validar_documento
+        data.documento = validar_documento(data.documento)
     existe = db.scalar(select(Usuario).where(func.lower(Usuario.email) == data.email.lower(), Usuario.id != (uid or 0)))
     if existe:
         raise HTTPException(409, "Ya existe un usuario con ese correo")
@@ -203,14 +223,20 @@ def _validar_usuario(db: Session, data: UsuarioIn, actor: Usuario, uid: int | No
 def _tiene_historial(db: Session, uid: int) -> bool:
     return bool(db.scalar(select(func.count()).select_from(Solicitud).where(Solicitud.lider_id == uid)) or
                 db.scalar(select(func.count()).select_from(SolicitudHistorial).where(SolicitudHistorial.usuario_id == uid)) or
-                db.scalar(select(func.count()).select_from(Cotizacion).where(Cotizacion.cargada_por == uid)))
+                db.scalar(select(func.count()).select_from(Cotizacion).where(Cotizacion.cargada_por == uid)) or
+                db.scalar(select(func.count()).select_from(Entrega).where(
+                    (Entrega.instructor_id == uid) | (Entrega.coordinador_id == uid) | (Entrega.entregado_por == uid))) or
+                db.scalar(select(func.count()).select_from(EntregaHistorial).where(EntregaHistorial.usuario_id == uid)))
 
 
 def _correo_credenciales(db: Session, u: Usuario, password: str, nuevo: bool) -> None:
     centro = db.get(Centro, u.centro_id).nombre if u.centro_id else ""
+    coord = db.get(Coordinacion, u.coordinacion_id).nombre if u.coordinacion_id else ""
     rol = {"MANAGER": "Manager de los centros de formación",
            "ADMIN": f"Administrador / Analista del {centro}",
-           "LIDER": f"Líder del lote {db.get(Lote, u.lote_id).nombre if u.lote_id else ''} ({centro})"}[u.rol]
+           "LIDER": f"Líder del lote {db.get(Lote, u.lote_id).nombre if u.lote_id else ''} ({centro})",
+           "COORDINADOR": f"Coordinador de la {coord} ({centro})",
+           "INSTRUCTOR": f"Instructor de la {coord} ({centro})"}[u.rol]
     correo.encolar(
         db, u.email,
         "Su acceso al sistema" if nuevo else "Su contraseña fue restablecida",
@@ -219,6 +245,41 @@ def _correo_credenciales(db: Session, u: Usuario, password: str, nuevo: bool) ->
         + f" como {rol}.\n\nUsuario: {u.email}\nContraseña temporal: {password}\n\n"
         "Por seguridad, el sistema le pedirá cambiarla en su primer ingreso.",
         "/login", "Ingresar")
+
+
+def _vigencia_del_proceso(db: Session) -> str:
+    """Texto sobre la vigencia en la que trabajará el líder: la abierta o, si no hay, la próxima programada."""
+    v = db.scalar(select(Vigencia).where(Vigencia.estado == "ABIERTA"))
+    if v:
+        return (f"Vigencia del proceso: {v.codigo}, abierta del {v.fecha_inicio:%d/%m/%Y} al {v.fecha_cierre:%d/%m/%Y}.\n"
+                f"Tiene plazo hasta el {v.fecha_cierre:%d/%m/%Y} para cargar las cotizaciones y enviar la solicitud del lote.")
+    v = db.scalar(select(Vigencia).where(Vigencia.estado == "PROGRAMADA").order_by(Vigencia.fecha_inicio))
+    if v:
+        return (f"Vigencia del proceso: {v.codigo}, programada del {v.fecha_inicio:%d/%m/%Y} al {v.fecha_cierre:%d/%m/%Y}.\n"
+                "Recibirá un aviso cuando se abra para empezar a cotizar y solicitar.")
+    return "Aún no hay una vigencia programada. Recibirá un aviso cuando el manager abra la vigencia del proceso."
+
+
+def _correo_designacion(db: Session, u: Usuario, password: str | None = None, nuevo: bool = False) -> None:
+    """Correo (y aviso en la aplicación) al líder designado: lote, centro, vigencia y, si aplica, credenciales."""
+    lote, centro = db.get(Lote, u.lote_id), db.get(Centro, u.centro_id)
+    titulo = f"Designación como líder del lote {lote.numero}. {lote.nombre}"
+    vigencia = _vigencia_del_proceso(db)
+    mensaje = (
+        f"Hola {u.nombre}:\n\n"
+        f"Se le designó como Líder del lote {lote.numero}. {lote.nombre} ({lote.abreviatura}) del {centro.nombre}"
+        + (f", Regional {centro.regional}" if centro.regional else "") + ".\n\n"
+        f"{vigencia}\n\n"
+        "Como líder del lote le corresponde registrar las cotizaciones de los proveedores (PDF y precios), "
+        "armar y enviar la solicitud de materiales del lote para su revisión, y proponer los artículos que "
+        "falten en el listado maestro."
+    )
+    if password:
+        mensaje += (f"\n\nSus datos de acceso:\nUsuario: {u.email}\nContraseña temporal: {password}\n"
+                    "Por seguridad, el sistema le pedirá cambiarla en su primer ingreso.")
+    correo.encolar(db, u.email, titulo, mensaje, "/login" if nuevo else "/lider", "Ingresar al sistema")
+    db.flush()
+    db.add(Notificacion(usuario_id=u.id, titulo=titulo, mensaje=vigencia, enlace="/lider"))
 
 
 @router.get("/usuarios")
@@ -242,11 +303,15 @@ def crear_usuario(data: UsuarioIn, actor=Depends(admin_o_manager), db: Session =
         raise HTTPException(422, "Debe indicar una contraseña temporal")
     validar_password(data.password)
     u = Usuario(nombre=data.nombre.strip(), email=data.email.lower(), rol=data.rol, centro_id=data.centro_id,
-                lote_id=data.lote_id, activo=data.activo, password_hash=hash_password(data.password),
+                lote_id=data.lote_id, coordinacion_id=data.coordinacion_id, documento=data.documento,
+                cargo=data.cargo.strip()[:120] if data.rol == "COORDINADOR" else "", activo=data.activo, password_hash=hash_password(data.password),
                 debe_cambiar_password=True)
     db.add(u)
     actividad(db, actor, f"Creó el usuario {u.nombre} ({NOMBRE_ROL[u.rol]})", centro_id=data.centro_id)
-    _correo_credenciales(db, u, data.password, nuevo=True)
+    if u.rol == "LIDER":
+        _correo_designacion(db, u, data.password, nuevo=True)
+    else:
+        _correo_credenciales(db, u, data.password, nuevo=True)
     db.commit()
     db.refresh(u)
     return {**usuario_out(u), "correo_enviado": correo.habilitado()}
@@ -262,16 +327,26 @@ def editar_usuario(uid: int, data: UsuarioIn, actor=Depends(admin_o_manager), db
     if data.centro_id != u.centro_id and _tiene_historial(db, uid):
         raise HTTPException(409, "El usuario tiene solicitudes o cotizaciones en su centro: no se puede trasladar. "
                                  "Desactívelo y cree un usuario nuevo en el otro centro.")
+    # Nueva designación: pasa a ser líder o cambia de lote
+    designado = data.rol == "LIDER" and (u.rol != "LIDER" or u.lote_id != data.lote_id)
     u.nombre, u.email, u.rol, u.activo = data.nombre.strip(), data.email.lower(), data.rol, data.activo
     u.centro_id, u.lote_id = data.centro_id, data.lote_id
+    u.coordinacion_id, u.documento = data.coordinacion_id, data.documento
+    u.cargo = data.cargo.strip()[:120] if data.rol == "COORDINADOR" else ""
     if data.password:
         validar_password(data.password)
         u.password_hash, u.debe_cambiar_password = hash_password(data.password), True
         u.intentos_fallidos, u.bloqueado_hasta = 0, None
+    if designado and u.activo:
+        _correo_designacion(db, u, data.password)
+        actividad(db, actor, f"Designó a {u.nombre} como líder del lote {db.get(Lote, u.lote_id).nombre}",
+                  centro_id=u.centro_id)
+    elif data.password:
         _correo_credenciales(db, u, data.password, nuevo=False)
     db.commit()
     db.refresh(u)
-    return {**usuario_out(u), "correo_enviado": bool(data.password) and correo.habilitado()}
+    enviado = bool(data.password or (designado and u.activo)) and correo.habilitado()
+    return {**usuario_out(u), "correo_enviado": enviado, "designado": designado and u.activo}
 
 
 @router.delete("/usuarios/{uid}")
@@ -473,7 +548,7 @@ def proveedor_out(p: Proveedor) -> dict:
 
 
 @router.get("/proveedores")
-def listar_proveedores(q: str = "", _=Depends(usuario_actual), db: Session = Depends(get_db)):
+def listar_proveedores(q: str = "", _=Depends(equipo_compras), db: Session = Depends(get_db)):
     stmt = select(Proveedor).order_by(Proveedor.razon_social)
     if q:
         stmt = stmt.where(Proveedor.razon_social.ilike(f"%{q}%") | Proveedor.nit.ilike(f"%{q}%"))
@@ -519,7 +594,7 @@ def _estados(db):
 
 
 @router.get("/estados-post")
-def listar_estados(_=Depends(usuario_actual), db: Session = Depends(get_db)):
+def listar_estados(_=Depends(equipo_compras), db: Session = Depends(get_db)):
     return _estados(db)
 
 
@@ -555,7 +630,7 @@ def reordenar_estados(ids: list[int], _=Depends(solo_manager), db: Session = Dep
 
 # --- Parámetros e índices (comunes; los gestiona el manager) -----------
 @router.get("/parametros")
-def listar_parametros(_=Depends(usuario_actual), db: Session = Depends(get_db)):
+def listar_parametros(_=Depends(equipo_compras), db: Session = Depends(get_db)):
     guardados = {p.clave: p.valor for p in db.scalars(select(Parametro))}
     return [{"clave": k, "valor": guardados.get(k, d), "descripcion": desc} for k, (d, desc) in PARAMETROS_DEFECTO.items()]
 
@@ -586,7 +661,7 @@ class IndiceIn(BaseModel):
 
 
 @router.get("/indices")
-def listar_indices(_=Depends(usuario_actual), db: Session = Depends(get_db)):
+def listar_indices(_=Depends(equipo_compras), db: Session = Depends(get_db)):
     return [{"anio": i.anio, "ipc": i.ipc, "puntos_adicionales": i.puntos_adicionales}
             for i in db.scalars(select(IndiceAjuste).order_by(IndiceAjuste.anio.desc()))]
 
@@ -626,3 +701,127 @@ def probar_correo(admin=Depends(admin_o_manager)):
     except Exception as e:
         raise HTTPException(502, f"No se pudo enviar: {e}")
     return {"ok": True, "para": admin.email}
+
+
+
+# --- Coordinaciones (las administra el administrador de cada centro) -----------
+class CoordinacionIn(BaseModel):
+    nombre: str
+    activo: bool = True
+
+
+def coordinacion_out(db: Session, c: Coordinacion) -> dict:
+    roles = dict(db.execute(select(Usuario.rol, func.count()).where(
+        Usuario.coordinacion_id == c.id, Usuario.activo.is_(True), Usuario.aprobado.is_(True)).group_by(Usuario.rol)).all())
+    return {"id": c.id, "centro_id": c.centro_id, "nombre": c.nombre, "activo": c.activo,
+            "coordinadores": roles.get("COORDINADOR", 0), "instructores": roles.get("INSTRUCTOR", 0)}
+
+
+@router.get("/coordinaciones")
+def listar_coordinaciones(centro_id: int | None = None, user=Depends(usuario_actual), db: Session = Depends(get_db)):
+    stmt = select(Coordinacion).order_by(Coordinacion.centro_id, Coordinacion.nombre)
+    centro = centro_de(user, centro_id)
+    if centro:
+        stmt = stmt.where(Coordinacion.centro_id == centro)
+    return [coordinacion_out(db, c) for c in db.scalars(stmt)]
+
+
+def _coordinacion_unica(db: Session, centro_id: int, nombre: str, cid: int = 0) -> str:
+    nombre = nombre.strip()
+    if not nombre:
+        raise HTTPException(422, "Indique el nombre de la coordinación")
+    if db.scalar(select(Coordinacion).where(Coordinacion.centro_id == centro_id, Coordinacion.id != cid,
+                                            func.lower(Coordinacion.nombre) == nombre.lower())):
+        raise HTTPException(409, "Ya existe una coordinación con ese nombre en el centro")
+    return nombre[:120]
+
+
+@router.post("/coordinaciones", status_code=201)
+def crear_coordinacion(data: CoordinacionIn, admin=Depends(solo_admin), db: Session = Depends(get_db)):
+    c = Coordinacion(centro_id=admin.centro_id, nombre=_coordinacion_unica(db, admin.centro_id, data.nombre),
+                     activo=data.activo)
+    db.add(c)
+    actividad(db, admin, f"Creó la coordinación {c.nombre}")
+    db.commit()
+    return coordinacion_out(db, c)
+
+
+@router.put("/coordinaciones/{cid}")
+def editar_coordinacion(cid: int, data: CoordinacionIn, admin=Depends(solo_admin), db: Session = Depends(get_db)):
+    c = get_or_404(db, Coordinacion, cid, "Coordinación")
+    verificar_centro(admin, c.centro_id, "La coordinación")
+    c.nombre, c.activo = _coordinacion_unica(db, c.centro_id, data.nombre, cid), data.activo
+    db.commit()
+    return coordinacion_out(db, c)
+
+
+# --- Instructores: aprobación del autorregistro --------------------------------
+revisor_instructores = requiere("COORDINADOR", "ADMIN", "MANAGER")
+
+
+def _instructor(db: Session, uid: int, actor: Usuario) -> Usuario:
+    u = get_or_404(db, Usuario, uid, "Instructor")
+    if u.rol != "INSTRUCTOR":
+        raise HTTPException(404, "Instructor no encontrado")
+    verificar_centro(actor, u.centro_id, "El instructor")
+    if actor.rol == "COORDINADOR" and u.coordinacion_id != actor.coordinacion_id:
+        raise HTTPException(403, "El instructor pertenece a otra coordinación")
+    return u
+
+
+@router.get("/instructores")
+def listar_instructores(pendientes: bool = False, user=Depends(revisor_instructores), db: Session = Depends(get_db)):
+    stmt = select(Usuario).where(Usuario.rol == "INSTRUCTOR").order_by(Usuario.aprobado, Usuario.nombre)
+    centro = centro_de(user)
+    if centro:
+        stmt = stmt.where(Usuario.centro_id == centro)
+    if user.rol == "COORDINADOR":
+        stmt = stmt.where(Usuario.coordinacion_id == user.coordinacion_id)
+    if pendientes:
+        stmt = stmt.where(Usuario.aprobado.is_(False))
+    return [{**usuario_out(u), "creado": u.creado.isoformat() if u.creado else None} for u in db.scalars(stmt)]
+
+
+@router.post("/instructores/{uid}/aprobar")
+def aprobar_instructor(uid: int, actor=Depends(revisor_instructores), db: Session = Depends(get_db)):
+    u = _instructor(db, uid, actor)
+    if u.aprobado:
+        raise HTTPException(409, "La cuenta ya está aprobada")
+    u.aprobado, u.activo = True, True
+    actividad(db, actor, f"Aprobó el registro del instructor {u.nombre}", centro_id=u.centro_id)
+    correo.encolar(db, u.email, "Su cuenta fue activada",
+                   f"Hola {u.nombre}:\n\n{actor.nombre} aprobó su registro como instructor de la "
+                   f"{u.coordinacion.nombre}. Ya puede ingresar al sistema con su correo y la contraseña que eligió "
+                   "para solicitar materiales de formación (formato GIL-F-014).", "/login", "Ingresar")
+    db.commit()
+    return usuario_out(u)
+
+
+@router.post("/instructores/{uid}/rechazar")
+def rechazar_instructor(uid: int, actor=Depends(revisor_instructores), db: Session = Depends(get_db)):
+    """Rechaza un registro pendiente (se elimina: aún no tiene historial)."""
+    u = _instructor(db, uid, actor)
+    if u.aprobado:
+        raise HTTPException(409, "Sólo se rechazan registros pendientes; para una cuenta activa use «Desactivar»")
+    correo.encolar(db, u.email, "Su registro no fue aprobado",
+                   f"Hola {u.nombre}:\n\nSu registro como instructor no fue aprobado. Si cree que es un error, "
+                   "comuníquese con el coordinador de su coordinación.", "/login", "Ir al sistema")
+    actividad(db, actor, f"Rechazó el registro de {u.nombre} ({u.email})", centro_id=u.centro_id)
+    db.query(Notificacion).filter(Notificacion.usuario_id == u.id).delete()
+    db.delete(u)
+    db.commit()
+    return {"ok": True}
+
+
+class ActivoIn(BaseModel):
+    activo: bool
+
+
+@router.post("/instructores/{uid}/activo")
+def activar_instructor(uid: int, data: ActivoIn, actor=Depends(revisor_instructores), db: Session = Depends(get_db)):
+    u = _instructor(db, uid, actor)
+    if not u.aprobado:
+        raise HTTPException(409, "Primero apruebe el registro")
+    u.activo = data.activo
+    db.commit()
+    return usuario_out(u)

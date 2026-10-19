@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..models import METODOS_PRECIO, AnalisisPrecio, Articulo, Cotizacion, Lote, Solicitud, Vigencia
-from ..security import solo_admin, usuario_actual
+from ..security import solo_admin, equipo_compras
 from ..services import excel_export
 from ..services.common import centro_de, get_or_404, lote_accesible, lotes_en_operacion, verificar_centro
 from ..services.pricing import analizar
@@ -24,7 +24,7 @@ def _articulos_lote(db: Session, lote_id: int) -> list[Articulo]:
 
 
 @router.get("")
-def analisis_lote(vigencia_id: int, lote_id: int | None = None, user=Depends(usuario_actual),
+def analisis_lote(vigencia_id: int, lote_id: int | None = None, user=Depends(equipo_compras),
                   db: Session = Depends(get_db)):
     lote_id = lote_accesible(db, user, lote_id).id
     vig = get_or_404(db, Vigencia, vigencia_id, "Vigencia")
@@ -39,7 +39,7 @@ def analisis_lote(vigencia_id: int, lote_id: int | None = None, user=Depends(usu
 
 
 @router.get("/cobertura")
-def cobertura(vigencia_id: int, centro_id: int | None = None, user=Depends(usuario_actual),
+def cobertura(vigencia_id: int, centro_id: int | None = None, user=Depends(equipo_compras),
               db: Session = Depends(get_db)):
     """Cobertura de precios por lote: indicador clave del tablero (verde ≥80 %, amarillo 60-79 %, rojo <60 %).
     Sólo incluye los lotes en operación (con líder asignado)."""
@@ -102,7 +102,7 @@ def ajustar(vigencia_id: int, articulo_id: int, data: AjusteIn, admin=Depends(so
 
 
 @router.get("/exportar")
-def exportar(vigencia_id: int, lote_id: int | None = None, user=Depends(usuario_actual), db: Session = Depends(get_db)):
+def exportar(vigencia_id: int, lote_id: int | None = None, user=Depends(equipo_compras), db: Session = Depends(get_db)):
     lote = lote_accesible(db, user, lote_id)
     lote_id = lote.id
     vig = get_or_404(db, Vigencia, vigencia_id, "Vigencia")
