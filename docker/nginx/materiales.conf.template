@@ -1,0 +1,71 @@
+# Sitio de materiales-formacion dentro del proxy de control-ingresos (ci-proxy).
+#
+# Se monta como plantilla adicional en /etc/nginx/templates/ del proxy; su
+# entrypoint la convierte en /etc/nginx/conf.d/materiales.conf. No usa
+# variables de envsubst: el dominio va escrito aquí para no depender del .env
+# de la otra aplicación.
+#
+# Del puerto 80 se encarga el bloque por defecto de control-ingresos, que ya
+# atiende /.well-known/acme-challenge/ para cualquier nombre. Aquí solo se
+# añade la redirección propia, para que no termine en el dominio de ingresos.
+
+server {
+    listen 80;
+    server_name materiales-formacion.senacasadigital.com;
+    server_tokens off;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://materiales-formacion.senacasadigital.com$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name materiales-formacion.senacasadigital.com;
+
+    access_log /var/log/nginx/access.log proxy_institucional;
+
+    ssl_certificate     /etc/letsencrypt/live/materiales-formacion.senacasadigital.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/materiales-formacion.senacasadigital.com/privkey.pem;
+    ssl_trusted_certificate /etc/letsencrypt/live/materiales-formacion.senacasadigital.com/chain.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+    ssl_stapling on;
+    ssl_stapling_verify on;
+
+    # Por encima de MAX_UPLOAD_MB (10) para que el límite lo aplique la API
+    # con su propio mensaje de error.
+    client_max_body_size 12m;
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "same-origin" always;
+    server_tokens off;
+
+    # El destino se resuelve en cada petición y no al arrancar: si materiales
+    # estuviera caído, un upstream fijo impediría que Nginx arrancase y
+    # control-ingresos quedaría fuera de servicio con él.
+    resolver 127.0.0.11 valid=30s;
+    set $materiales http://materiales-app:8000;
+
+    location / {
+        proxy_pass $materiales;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_connect_timeout 5s;
+        proxy_read_timeout 120s;
+    }
+}

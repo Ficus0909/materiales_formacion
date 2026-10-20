@@ -1,0 +1,32 @@
+# Superposición de producción para el VPS compartido con control-ingresos.
+#
+#     docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# El HTTPS lo termina el proxy de control-ingresos (ci-proxy), que alcanza la
+# aplicación por la red control_ingresos_red con el alias «materiales-app».
+# Por eso aquí no se publica ningún puerto en la máquina anfitriona.
+name: materiales-formacion
+
+services:
+  db:
+    restart: always
+    networks:
+      default:
+        aliases: [materiales-db]
+
+  app:
+    restart: always
+    # En control_ingresos_red el nombre «db» es el Postgres de control-ingresos:
+    # la base propia se alcanza por un alias que no choca.
+    environment:
+      DATABASE_URL: mysql+pymysql://materiales:${DB_PASSWORD}@materiales-db:3306/materiales?charset=utf8mb4
+    ports: !reset []
+    networks:
+      default:
+      proxy:
+        aliases: [materiales-app]
+
+networks:
+  proxy:
+    name: control_ingresos_red
+    external: true
