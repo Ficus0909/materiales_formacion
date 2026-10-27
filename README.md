@@ -97,3 +97,7 @@ frontend/src/views/      pantallas manager/, admin/, lider/ y entregas/ (instruc
 docs/REGLAS_NEGOCIO.md
 contexto/                documentos fuente
 ```
+
+## Licencia
+
+© 2026 Andres Castellanos. Todos los derechos reservados. Ver [LICENSE](LICENSE).

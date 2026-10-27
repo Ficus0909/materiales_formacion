@@ -33,6 +33,7 @@ async function entrar() {
       <h1>Materiales de Formación</h1>
       <p>Estudio de mercados, solicitudes por lote y entrega de materiales</p>
       <p class="small" style="opacity:.85">SENA · Centros de formación</p>
+      <p class="small" style="opacity:.6;margin-top:24px">© 2026 Andres Castellanos. Todos los derechos reservados.</p>
     </section>
     <section class="form">
       <form class="card" @submit.prevent="entrar">

@@ -115,6 +115,7 @@ const iniciales = computed(() => (auth.usuario?.nombre || '?').split(' ').map((p
           <router-link to="/cambiar-password" class="small" style="color:#cfe">Contraseña</router-link>
           <button class="link small" style="color:#ffb4b4" @click="salir">Cerrar sesión</button>
         </div>
+        <div class="small" style="opacity:.5;margin-top:10px">© 2026 Andres Castellanos</div>
       </div>
     </aside>
     <div v-if="abierto" class="scrim" @click="abierto = false" />
