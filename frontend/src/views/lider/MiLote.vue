@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue'
 import { api, qs } from '../../api'
 import Badge from '../../components/Badge.vue'
 import Modal from '../../components/Modal.vue'
+import UnidadSelect from '../../components/UnidadSelect.vue'
 import { debounce, fecha, money, toast, toastError } from '../../util'
 
 const q = ref('')
@@ -85,7 +86,7 @@ onMounted(() => { cargar(); cargarPropuestas() })
     <Modal v-if="nueva" titulo="Proponer artículo nuevo" @cerrar="nueva = null">
       <form id="fp" class="form-grid" @submit.prevent="proponer">
         <label class="f req full"><span>Nombre del producto</span><input v-model="nueva.nombre" required /></label>
-        <label class="f req"><span>Unidad de medida (SECOP II)</span><input v-model="nueva.unidad" required placeholder="UN, KG, L, GAR…" /></label>
+        <label class="f req"><span>Unidad de medida (SECOP II)</span><UnidadSelect v-model="nueva.unidad" required /></label>
         <label class="f req full"><span>Ficha técnica</span><textarea v-model="nueva.descripcion" required rows="4" /></label>
         <label class="f full"><span>Justificación (uso en la formación)</span><textarea v-model="nueva.justificacion" rows="2" /></label>
       </form>

@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from 'vue'
 import { api, qs } from '../../api'
 import Modal from '../../components/Modal.vue'
+import UnidadSelect from '../../components/UnidadSelect.vue'
 import { debounce, money, number, toast, toastError } from '../../util'
 
 const lotes = ref([])
@@ -117,7 +118,7 @@ async function importarHist() {
         <label class="f req"><span>Lote</span><select v-model="form.lote_id" required><option v-for="l in lotes" :key="l.id" :value="l.id">{{ l.numero }}. {{ l.nombre }}</option></select></label>
         <label class="f req"><span>Código UNSPSC (8 dígitos)</span><input v-model="form.codigo_unspsc" required pattern="\d{8}" maxlength="8" inputmode="numeric" /></label>
         <label class="f req full"><span>Nombre del producto</span><input v-model="form.nombre" required maxlength="300" /></label>
-        <label class="f req"><span>Unidad SECOP II</span><input v-model="form.unidad" required maxlength="10" /></label>
+        <label class="f req"><span>Unidad SECOP II</span><UnidadSelect v-model="form.unidad" required /></label>
         <label class="f"><span>Estado</span><select v-model="form.activo"><option :value="true">Activo</option><option :value="false">Inactivo</option></select></label>
         <label class="f full"><span>Descripción / ficha técnica</span><textarea v-model="form.descripcion" rows="5" /></label>
       </form>

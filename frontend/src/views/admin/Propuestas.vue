@@ -3,6 +3,7 @@ import { onMounted, ref, watch } from 'vue'
 import { api } from '../../api'
 import Badge from '../../components/Badge.vue'
 import Modal from '../../components/Modal.vue'
+import UnidadSelect from '../../components/UnidadSelect.vue'
 import { fecha, toast, toastError } from '../../util'
 
 const estado = ref('PENDIENTE')
@@ -44,7 +45,7 @@ async function enviar() {
       <form id="fr" class="form-grid" @submit.prevent="enviar">
         <template v-if="resp.aprobar">
           <label class="f req"><span>Código UNSPSC</span><input v-model="resp.codigo_unspsc" required pattern="\d{8}" maxlength="8" /></label>
-          <label class="f req"><span>Unidad SECOP II</span><input v-model="resp.unidad" required /></label>
+          <label class="f req"><span>Unidad SECOP II</span><UnidadSelect v-model="resp.unidad" required /></label>
           <label class="f req full"><span>Nombre</span><input v-model="resp.nombre" required /></label>
           <label class="f full"><span>Ficha técnica</span><textarea v-model="resp.descripcion" rows="4" /></label>
         </template>
